@@ -160,5 +160,5 @@ df_house_data['BESS Charge (kWh)'] = charge     # Amount of kWh that BESS charge
 df_house_data['BESS Discharge (kWh)'] = discharge   # Amount of kWh BESS discharges
 
 # Write back to Excel (overwrite file with new columns appended)
-with pd.ExcelWriter("vic_house_data.xlsx", engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
+with pd.ExcelWriter("vic_house_data_with_bess.xlsx", engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
     df_house_data.to_excel(writer, index=False)
