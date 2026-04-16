@@ -22,11 +22,13 @@ class Household:
                 pv_cap,
                 df_demand,
                 df_pv,
+                df_controlled_load,
                 label=None
     ):
         self.pvCap = pv_cap
         self.dataDemand = df_demand
         self.dataPV = df_pv
+        self.dataCL = df_controlled_load
         if label != None:
             self.label = label
         else:
@@ -73,8 +75,11 @@ household = Household(
                         6.0, #PV Capacity
                         df_house_data['GC'], # Demand
                         df_house_data['PV'],  # PV generation
+                        df_house_data['CL'],
                         label = 69 # Household number (end of my zid)
 )
+
+
 
 # Clean the data: detect any weird metering issues or households
 
