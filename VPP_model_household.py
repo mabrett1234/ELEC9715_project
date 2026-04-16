@@ -1,7 +1,9 @@
 #VPP_model_household
 #To use: import VPP_model_household as household
 """
-TODO: Code overview
+Read in a household PV and load data
+Calculate BESS data
+Write result into an Excel file
 """
 
 # Imports
@@ -20,15 +22,27 @@ class Household:
     def __init__(
                 self,
                 pv_cap,
-                df_demand,
-                df_pv,
-                df_controlled_load,
+                pv_arr,
+                gc_arr,
+                cl_arr,
+                bess_capacity=20.0,
+                bess_soc_min=4.0,
+                bess_soc_init=20.0,
                 label=None
     ):
-        self.pvCap = pv_cap
-        self.dataDemand = df_demand
-        self.dataPV = df_pv
-        self.dataCL = df_controlled_load
+        self.pvCapacity = pv_cap
+        # Just going to use defaults for these for most analysis
+        self.bessCapacity = bess_capacity
+        self.bessSocMin=bess_soc_min
+        self.bessSocInit=bess_soc_init
+        # Annual timeseries
+        self.data = pd.DataFrame(
+                                    {
+                                        "GC":gc_arr,
+                                        "PV":pv_arr,
+                                        "CL":cl_arr
+                                    }
+        )
         if label != None:
             self.label = label
         else:
@@ -36,11 +50,71 @@ class Household:
 
     def __str__(self):
         return "Type: Household, name: {}".format(self.label)
+    
+    def clean_data(self):
+        for i in range(0, len(self.data.columns)):
+            self.data.iloc[:, i] = self.data.iloc[:, i].clip(lower=0)
 
-    # Other functions
-#TODO: Import household data: Store as two dataframes
+    def combine_demand(self):
+        # Assuming CL column exists.
+        household.data['load'] = self.data['GC'] + self.data['CL']
 
-# Grab entire excel file and convert to pandas dataframe
+    def calc_bess_data(self):
+        n = len(household.data.index)
+        soc = np.zeros(n)            # State of Charge (kWh)
+        charge = np.zeros(n)         # Charging energy (kWh)
+        discharge = np.zeros(n)      # Discharging energy (kWh)
+
+        # Set initial SoC
+        soc[0] = household.bessSocInit
+
+        # BESS operation loop
+        for t in range(1, n):
+            # Net energy balance (kWh over 30 min)
+            net_energy = self.data['PV'].iloc[t] - self.data['load'].iloc[t]
+
+            # Case 1: Excess PV -> charge BESS
+            available_capacity = self.bessCapacity - soc[t-1]
+            available_energy = soc[t-1] - self.bessSocMin
+            # all elements set to zero already
+
+            # Case 1: Excess PV -> charge BESS
+            if net_energy > 0:
+                charge[t] = min(net_energy, available_capacity)
+            # Case 2: Not enough PV -> discharge BESS
+            elif net_energy < 0:
+                discharge[t] = min(
+                                    -net_energy,
+                                max(available_energy, 0)
+                )
+            # Update SoC
+            soc[t] = soc[t-1] + charge[t] - discharge[t]
+            # Enforce bounds (safety check)
+            if soc[t] > self.bessCapacity:
+                soc[t] = self.bessCapacity
+            if soc[t] < self.bessSocMin:
+                soc[t] = self.bessSocMin
+
+        # Append BESS data to dataframe
+        self.data['BESS SoC (kWh)'] = soc   # State of Charge of BESS
+        self.data['BESS Charge (kWh)'] = charge     # Amount of kWh that BESS charges
+        self.data['BESS Discharge (kWh)'] = discharge   # Amount of kWh BESS discharges
+
+    def write_to_excel(self, fName):
+        # Write back to Excel (overwrite file with new columns appended)
+        try:
+            os.remove("{}.xlsx".format(fName))
+        except OSError:
+            pass
+        with pd.ExcelWriter(
+                            "{}.xlsx".format(fName),
+                            engine='openpyxl',
+                            mode='w',
+                            ) as writer:
+            self.data.to_excel(writer, index=False)
+
+# Functions
+
 def check_fname_in_dir(file_name, ext):
     valid_fnames = os.listdir()
     file_name = file_name.split('/')[-1]
@@ -67,19 +141,55 @@ def import_household_data(file_name, dbug_lvl):
     # Return the data as a pandas dataframe
     return df
 
+def Household_from_df(df):
+    # Remove any NaNs
+    df = df.fillna(0)
+    # Split into pandas dataframe for demand and pv
+    household = Household(
+                            6.0, #PV Capacity
+                            df['PV'].to_numpy(), # Demand
+                            df['GC'].to_numpy(),  # PV gen
+                            df['CL'].to_numpy(),
+                            label = 69 # Household number
+    )
+    household.clean_data()
+    return household
+
+# Main: read in data and use class + methods to do bess operation
+
 # Initial test: Just using only one household
-df_house_data = import_household_data("vic_house_data.xlsx", 2)
+house_data = import_household_data("vic_house_data.xlsx", 2)
 
-# Split into pandas dataframe for demand and pv
-household = Household(
-                        6.0, #PV Capacity
-                        df_house_data['GC'], # Demand
-                        df_house_data['PV'],  # PV generation
-                        df_house_data['CL'],
-                        label = 69 # Household number (end of my zid)
-)
+# Convert into a household object
+household = Household_from_df(house_data)
 
+# Code to generate data for BESS given PV and load demand
 
+# Combine the demand
+household.combine_demand()
 
-# Clean the data: detect any weird metering issues or households
+# Calculate the bess data
+household.calc_bess_data()
 
+# Write the data to excel
+household.write_to_excel("vic_house_data_with_bess")
+
+"""
+# BESS model parameters (user-defined)
+bess_capacity = float(input("Enter BESS capacity (kWh): "))   # kWh
+bess_min_soc = float(input("Enter minimum SoC (kWh): "))    # kWh (reserve level)
+bess_init_soc = float(input("Enter initial SoC (kWh): "))  # kWh (initial state of charge)
+
+# Validate inputs
+if bess_capacity <= 0:
+    raise ValueError("BESS capacity <= 0")
+
+if bess_soc_min < 0 or bess_min_soc > bess_capacity:
+    raise ValueError("Minimum SoC not between 0 and capacity")
+
+if (
+    bess_soc_init < bess_soc_min or
+    bess_soc_init > bess_capacity
+):
+    raise ValueError("Initial SoC not between min SoC and capacity")
+"""
