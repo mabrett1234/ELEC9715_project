@@ -318,3 +318,28 @@ def calc_bess_data_origin(household, customer_model, spot_data):
     household.data['BESS SoC (kWh)'] = soc   # State of Charge
     household.data['BESS Charge (kWh)'] = charge # kWh charges
     household.data['BESS Discharge (kWh)'] = discharge # kWh discharges
+
+def customer_cost_calc_origin(
+                                customer_model,
+                                bess_charge_arr,
+                                bess_discharge_arr,
+                                export_arr,
+                                grid_support_arr,
+):
+    # Split export into positive and negative arrays
+
+    # Revenue calcs
+
+    # Revenue from grid support
+
+    # Revenue from export
+
+    # Revenue from any bonuses
+
+    # Cost calcs
+
+    # Daily or monthly fees
+
+    # Cost from imports
+
+    return 0.0
