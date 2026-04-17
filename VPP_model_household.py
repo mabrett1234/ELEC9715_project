@@ -12,6 +12,12 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+# Consants*
+PV_CAP_DEFAULT = 6.0
+BESS_CAP_DEFAULT = 20.0
+BESS_SOC_MIN_DEFAULT = 20.0*0.2
+BESS_SOC_INIT_DEFAULT = BESS_CAP_DEFAULT
+
 # Classes
 class Household:
     """
@@ -21,13 +27,13 @@ class Household:
 
     def __init__(
                 self,
-                pv_cap,
                 pv_arr,
                 gc_arr,
                 cl_arr,
-                bess_capacity=20.0,
-                bess_soc_min=4.0,
-                bess_soc_init=20.0,
+                pv_cap=PV_CAP_DEFAULT,
+                bess_capacity=BESS_CAP_DEFAULT,
+                bess_soc_min=BESS_SOC_MIN_DEFAULT,
+                bess_soc_init=BESS_SOC_INIT_DEFAULT,
                 label=None
     ):
         self.pvCapacity = pv_cap
@@ -141,15 +147,25 @@ def excel_to_df(file_name, dbug_lvl):
     # Return the data as a pandas dataframe
     return df
 
-def Household_from_df(df):
+# TODO: Make this less redundant and cursed.
+def Household_from_df(
+                        df,
+                        pv_capacity=PV_CAP_DEFAULT,
+                        bess_capacity=BESS_CAP_DEFAULT,
+                        bess_soc_min=BESS_SOC_MIN_DEFAULT,
+                        bess_soc_init=BESS_SOC_INIT_DEFAULT
+    ):
     # Remove any NaNs
     df = df.fillna(0)
     # Split into pandas dataframe for demand and pv
     household = Household(
-                            6.0, #PV Capacity
                             df['PV'].to_numpy(), # Demand
                             df['GC'].to_numpy(),  # PV gen
                             df['CL'].to_numpy(),
+                            pv_cap=pv_capacity,
+                            bess_capacity=bess_capacity,
+                            bess_soc_min=bess_soc_min,
+                            bess_soc_init=bess_soc_init,
                             label = 69 # Household number
     )
     household.clean_data()

@@ -196,6 +196,10 @@ household = house.Household_from_df(house_data)
 # Combine the demand
 household.combine_demand()
 
+# Calculate the operation - no grid events yet
+
+calc_bess_data_origin(household, origin_vic, spot_data)
+
 # TODO:
 # Make minimum state of charge accessible from this level
 
@@ -322,9 +326,11 @@ def calc_bess_data_origin(household, customer_model, spot_data):
         grid_support_total = grid_support_total + grid_support[t]
 
     # Append BESS data to dataframe
-    household.data['BESS SoC (kWh)'] = soc   # State of Charge
-    household.data['BESS Charge (kWh)'] = charge # kWh charges
-    household.data['BESS Discharge (kWh)'] = discharge # kWh discharges
+    household.data['SoC (kWh)'] = soc   # State of Charge
+    household.data['Charge (kWh)'] = charge # kWh charges
+    household.data['Discharge (kWh)'] = discharge # kWh discharges
+    household.data['Export (kWh)'] = export
+    household.data['Grid Support (kWh)'] = grid_support
 
 def customer_cost_calc_origin(
                                 customer_model,
@@ -396,3 +402,46 @@ def customer_cost_calc_origin(
     profit_yr = revenue_yr - cost_yr
 
     return profit_yr
+
+#===========MAIN===========
+
+# TODO: Generate timeseries arrays for:
+    # Export
+    # Import
+
+# Using:
+    # origin VPP rules
+    # Household object
+    # Spot price timeseries*
+
+
+#==========Spot price data==========
+spot_data = nem.import_spot_data("nem_spot_data_fy12.xlsx", 0)
+
+# Initial test: Just using only one household
+house_data = house.excel_to_df("house_individual_data.xlsx", 0)
+# Convert into a household object
+bess_cap = 20.0
+soc_min = bess_cap*origin_vic.socMin
+household = house.Household_from_df(
+                                    house_data,
+                                    pv_capacity = 10.0,
+                                    bess_capacity = bess_cap,
+                                    bess_soc_min = soc_min
+                                    )
+# Combine the demand
+household.combine_demand()
+
+# Calculate the operation - no grid events yet
+calc_bess_data_origin(household, origin_vic, spot_data)
+
+# Write the household data to excel to check
+household.write_to_excel("household_individual_origin_vpp")
+
+# TODO:
+# Make minimum state of charge accessible from this level
+
+# Identify times when origin will request battery discharge
+    # Maybe look at FCAS contingency events?
+    # Otherwise take highest prices
+
