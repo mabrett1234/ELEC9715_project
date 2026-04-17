@@ -26,8 +26,8 @@ class CustomerModel:
                 battery_import_24hr=None,
                 price_vpp_use=0.0,
                 day_charge=0.0,
-                bonus_signup=0,
-                bonus_monthly=0,
+                bonus_signup=0.0,
+                bonus_monthly=0.0,
                 export_max_yr=None,
                 soc_min=0.0,
                 price_pv_export_threshold=0.0,
@@ -71,7 +71,7 @@ def model_setup_globird():
 
 """
 Set based on Victoria Origin Go Variable Solar Boost
-
+TODO: Update to NSW
 """
 origin_export_price = np.zeros((24,2))
 origin_export_price[:,0] = 0.05 # Flat rate for first 8kWh
@@ -97,6 +97,7 @@ print(origin_vic)
 Set based on Victoria AGL BYOB
 With the battery rewards electricity plan treated as FiT income
 """
+
 agl_export_price = 0.015*np.ones((24,1)) # Flat rate
 # Set values between 5pm and 9pm
 agl_export_price[17:21,:] = 10/40 # Paid $10 for every 40 kWh exported
@@ -111,7 +112,7 @@ agl_vic = CustomerModel(
                     day_charge=1.10704, 
                     bonus_signup=200, # Welcome credit is $200
                     export_max_yr=250,
-                    bonus_monthly=80/12, # AGL gives annual credit of $80 for VPP participation
+                    bonus_monthly=float(80/12), # AGL gives annual credit of $80 for VPP participation
                     soc_min=0.2, # AGL says they will probably leave 20% in the battery
                     soc_min_flag=False, # AGL doesn't let you change the soc min
                     label="AGL Bring Your Own Battery"
@@ -190,6 +191,23 @@ house_data = house.excel_to_df("house_individual_data.xlsx", 0)
 household = house.Household_from_df(house_data)
 # Combine the demand
 household.combine_demand()
+
+# TODO:
+# Make minimum state of charge accessible from this level
+
+# Identify times when origin will request battery discharge
+    # Maybe look at FCAS contingency events?
+    # Otherwise take highest prices
+
+# At these times:
+    # Choose to discharge battery to grid unless demand won't be met
+    # Log that it happened somehow
+
+# Calculate export amount
+
+# Calculate import amount
+
+# Calculate total cost including bonuses
 
 # Operation for a 30 min interval
 def bess_operation_origin(
