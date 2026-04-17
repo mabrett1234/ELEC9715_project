@@ -115,7 +115,6 @@ class Household:
             self.data.to_excel(writer, index=False)
 
 # Functions
-
 def check_fname_in_dir(file_name, ext):
     valid_fnames = os.listdir()
     file_name = file_name.split('/')[-1]
@@ -127,7 +126,7 @@ def check_fname_in_dir(file_name, ext):
             if fname.endswith(ext):
                 print("\t{}".format(fname))
 
-def import_household_data(file_name, dbug_lvl):
+def excel_to_df(file_name, dbug_lvl):
     # Check the file name is in current directory and excel
     check_fname_in_dir(file_name, ".xlsx")
     # Import the data with pandas.
