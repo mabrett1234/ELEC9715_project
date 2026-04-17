@@ -199,70 +199,120 @@ household.combine_demand()
     # Maybe look at FCAS contingency events?
     # Otherwise take highest prices
 
-# At these times:
-    # Choose to discharge battery to grid unless demand won't be met
-    # Log that it happened somehow
-
-# Calculate export amount
-
-# Calculate import amount
-
 # Calculate total cost including bonuses
 
 # Operation for a 30 min interval
 def bess_operation_origin(
+                            customer_model,
                             soc_max=0.0,
                             soc_min=0.0,
                             soc_prev=0.0,
                             pv_gen=0.0,
                             demand=0.0,
+                            grid_event=False,
+                            grid_support_total=0.0,
                             spot_price=0.0
 ):
+        max_grid_support = customer_model.export_max_yr
         charge = 0.0
         discharge = 0.0
+        export = 0.0
+        grid_support = 0.0
         # Net energy balance (kWh over 30 min)
-        net_energy = pv_gen - demand
-        # Case 1: Excess PV -> charge BESS
+        net_demand = demand - pv_gen
         available_capacity = soc_max - soc_prev
         available_energy = soc_prev - soc_min
-        # all elements set to zero already
 
-        # Case 1: Excess PV -> charge BESS
-        if net_energy > 0:
-            charge = min(net_energy, available_capacity)
-        # Case 2: Not enough PV -> discharge BESS
-        elif net_energy < 0:
-            discharge = min(-net_energy, max(available_energy, 0))
-        # Update SoC
-        soc = soc_prev + charge - discharge
+        # Self consumption and PV export to grid.
+        # In grid event, all available PV is exported
+        # Case 1: Still demand after PV gen used
+        if net_demand > 0:
+            # Discharge to meet remaining demand,
+            # Using available bess capacity
+            discharge = min(net_demand, available_capacity)
+            # Update remaining demand and capacity
+            net_demand = net_demand - discharge
+            available_capacity = available_capacity - discharge
+            if net_demand > 0: # Still remaining demand
+                export = -net_demand # Need to import electricity
+        # Case 2: Negative demand: Have excess PV Gen
+        elif net_demand < 0:
+            if (grid_event and
+                grid_support_total < max_grid_support
+                ):
+                # Export any PV to the grid
+                max_export = max_grid_support - grid_support_total
+                grid_support = min(-net_demand, max_export)
+                export = export + grid_support
+            else:
+                # Charge battery til PV gen runs out or full
+                if -net_demand > available_energy:
+                    # Charge battery til full
+                    charge = max(available_energy, 0)
+                    # Export any leftover
+                    export = -net_demand - available_energy
+                else:
+                    # Charge battery til PV gen runs out
+                    charge = -net_demand
+                    # No export
+        # If grid event, discharge battery into grid
+        # Include any PV export
+        grid_support_total = grid_support_total + grid_support
+        if(
+            export >=0.0 and # Can't export if drawing from grid
+            grid_event and
+            grid_support_total < max_grid_support
+        ):
+            max_export = max_grid_support - grid_support_total
+            discharge_to_grid = min(available_energy, max_export)
+            # Update discharge so SoC is accurate
+            discharge = discharge + discharge_to_grid
+            # Update grid support. include any PV export
+            grid_support = grid_support + discharge_to_grid
+            export = export + discharge_to_grid
+
+        soc = soc_prev + charge - discharge # Update SoC
         # Enforce bounds (safety check)
+        # TODO: Print message if any bounds exceeded.
         soc = min(soc, soc_max)
         soc = max(soc, soc_min)
-        return [charge, discharge, soc]
+        return [charge, discharge, soc, export, grid_support]
 
 # Function looping over whole year
-def calc_bess_data_origin(household, spot_data):
+def calc_bess_data_origin(household, customer_model, spot_data):
     n = len(household.data.index)
     soc = np.zeros(n)            # State of Charge (kWh)
     charge = np.zeros(n)         # Charging energy (kWh)
     discharge = np.zeros(n)      # Discharging energy (kWh)
+    export = np.zeros(n)
+    grid_support = np.zeros(n)
 
     # Set initial SoC
     soc[0] = household.bessSocInit
 
     # BESS operation loop
+    grid_support_total = 0.0
     for t in range(1, n):
+        # TODO: Identify it is a grid event
+        # Can use FCAS or spot price data
+        grid_event = False
         bess_data = bess_operation_origin(
+                                customer_model,
                                 soc_min=household.bessCapacity,
                                 soc_max=household.bessSocMin,
                                 soc_prev=soc[t-1],
                                 pv_gen=household.data['PV'].iloc[t],
                                 demand=household.data['PV'].iloc[t],
-                                spot_price=spot_data.iloc[t]
+                                spot_price=spot_data.iloc[t],
+                                grid_event=grid_event,
+                                grid_support_total=grid_support_total
         )
         charge[t] = bess_data[0]
         discharge[t] = bess_data[1]
         soc[t] = bess_data[2]
+        export[t] = bess_data[3]
+        grid_support[t] = bess_data[4]
+        grid_support_total = grid_support_total + grid_support[t]
 
     # Append BESS data to dataframe
     household.data['BESS SoC (kWh)'] = soc   # State of Charge
