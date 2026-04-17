@@ -26,6 +26,7 @@ class CustomerModel:
                 battery_import_24hr=None,
                 price_vpp_use=0.0,
                 day_charge=0.0,
+                month_charge=0.0,
                 bonus_signup=0.0,
                 bonus_monthly=0.0,
                 export_max_yr=None,
@@ -40,6 +41,9 @@ class CustomerModel:
             self.priceImportBattery = self.priceImport
         else:
             self.priceImportBattery = battery_import_24hr
+        self.price_vpp_use = price_vpp_use
+        self.chargeDay = day_charge
+        self.chargeMonth = month_charge
         self.bonusSignup = bonus_signup
         self.bonusMonthly = bonus_monthly
         self.exportMax = export_max_yr
@@ -199,9 +203,7 @@ household.combine_demand()
     # Maybe look at FCAS contingency events?
     # Otherwise take highest prices
 
-# Calculate total cost including bonuses
 
-# Operation for a 30 min interval
 def bess_operation_origin(
                             customer_model,
                             soc_max=0.0,
@@ -213,70 +215,75 @@ def bess_operation_origin(
                             grid_support_total=0.0,
                             spot_price=0.0
 ):
-        max_grid_support = customer_model.export_max_yr
-        charge = 0.0
-        discharge = 0.0
-        export = 0.0
-        grid_support = 0.0
-        # Net energy balance (kWh over 30 min)
-        net_demand = demand - pv_gen
-        available_capacity = soc_max - soc_prev
-        available_energy = soc_prev - soc_min
+    """
+    USING ORIGIN MODEL OF VPP
+    This function decides bess operation over a 30min interval.
+    """
 
-        # Self consumption and PV export to grid.
-        # In grid event, all available PV is exported
-        # Case 1: Still demand after PV gen used
-        if net_demand > 0:
-            # Discharge to meet remaining demand,
-            # Using available bess capacity
-            discharge = min(net_demand, available_capacity)
-            # Update remaining demand and capacity
-            net_demand = net_demand - discharge
-            available_capacity = available_capacity - discharge
-            if net_demand > 0: # Still remaining demand
-                export = -net_demand # Need to import electricity
-        # Case 2: Negative demand: Have excess PV Gen
-        elif net_demand < 0:
-            if (grid_event and
-                grid_support_total < max_grid_support
-                ):
-                # Export any PV to the grid
-                max_export = max_grid_support - grid_support_total
-                grid_support = min(-net_demand, max_export)
-                export = export + grid_support
-            else:
-                # Charge battery til PV gen runs out or full
-                if -net_demand > available_energy:
-                    # Charge battery til full
-                    charge = max(available_energy, 0)
-                    # Export any leftover
-                    export = -net_demand - available_energy
-                else:
-                    # Charge battery til PV gen runs out
-                    charge = -net_demand
-                    # No export
-        # If grid event, discharge battery into grid
-        # Include any PV export
-        grid_support_total = grid_support_total + grid_support
-        if(
-            export >=0.0 and # Can't export if drawing from grid
-            grid_event and
+    max_grid_support = customer_model.export_max_yr
+    charge = 0.0
+    discharge = 0.0
+    export = 0.0
+    grid_support = 0.0
+    # Net energy balance (kWh over 30 min)
+    net_demand = demand - pv_gen
+    available_capacity = soc_max - soc_prev
+    available_energy = soc_prev - soc_min
+
+    # Self consumption and PV export to grid.
+    # In grid event, all available PV is exported
+    # Case 1: Still demand after PV gen used
+    if net_demand > 0:
+        # Discharge to meet remaining demand,
+        # Using available bess capacity
+        discharge = min(net_demand, available_capacity)
+        # Update remaining demand and capacity
+        net_demand = net_demand - discharge
+        available_capacity = available_capacity - discharge
+        if net_demand > 0: # Still remaining demand
+            export = -net_demand # Need to import electricity
+    # Case 2: Negative demand: Have excess PV Gen
+    elif net_demand < 0:
+        if (grid_event and
             grid_support_total < max_grid_support
-        ):
+            ):
+            # Export any PV to the grid
             max_export = max_grid_support - grid_support_total
-            discharge_to_grid = min(available_energy, max_export)
-            # Update discharge so SoC is accurate
-            discharge = discharge + discharge_to_grid
-            # Update grid support. include any PV export
-            grid_support = grid_support + discharge_to_grid
-            export = export + discharge_to_grid
+            grid_support = min(-net_demand, max_export)
+            export = export + grid_support
+        else:
+            # Charge battery til PV gen runs out or full
+            if -net_demand > available_energy:
+                # Charge battery til full
+                charge = max(available_energy, 0)
+                # Export any leftover
+                export = -net_demand - available_energy
+            else:
+                # Charge battery til PV gen runs out
+                charge = -net_demand
+                # No export
+    # If grid event, discharge battery into grid
+    # Include any PV export
+    grid_support_total = grid_support_total + grid_support
+    if(
+        export >=0.0 and # Can't export if drawing from grid
+        grid_event and
+        grid_support_total < max_grid_support
+    ):
+        max_export = max_grid_support - grid_support_total
+        discharge_to_grid = min(available_energy, max_export)
+        # Update discharge so SoC is accurate
+        discharge = discharge + discharge_to_grid
+        # Update grid support. include any PV export
+        grid_support = grid_support + discharge_to_grid
+        export = export + discharge_to_grid
 
-        soc = soc_prev + charge - discharge # Update SoC
-        # Enforce bounds (safety check)
-        # TODO: Print message if any bounds exceeded.
-        soc = min(soc, soc_max)
-        soc = max(soc, soc_min)
-        return [charge, discharge, soc, export, grid_support]
+    soc = soc_prev + charge - discharge # Update SoC
+    # Enforce bounds (safety check)
+    # TODO: Print message if any bounds exceeded.
+    soc = min(soc, soc_max)
+    soc = max(soc, soc_min)
+    return [charge, discharge, soc, export, grid_support]
 
 # Function looping over whole year
 def calc_bess_data_origin(household, customer_model, spot_data):
@@ -321,25 +328,71 @@ def calc_bess_data_origin(household, customer_model, spot_data):
 
 def customer_cost_calc_origin(
                                 customer_model,
-                                bess_charge_arr,
-                                bess_discharge_arr,
-                                export_arr,
+                                charge_arr,
+                                discharge_arr,
+                                export_df,
                                 grid_support_arr,
+                                first_yr=True
 ):
+    revenue_yr = 0.0
+    cost_yr = 0.0
+    profit_yr = 0.0
     # Split export into positive and negative arrays
+    import_df = -export_df
+    import_df = import_df.clip(0)
+    export_only_df = export_df.clip(0)
 
-    # Revenue calcs
+    #====Revenue calcs====
 
     # Revenue from grid support
+    rev_grid_support = customer_model.price_vpp_use*grid_support_arr.sum()
+    max_revenue = customer_model.price_vpp_use*customer_model.export_max_yr
+    # Double check
+    if rev_grid_support > max_revenue:
+        print("ERR: bess operation not within retailer rules")
+        print("Issue with grid support calc: exceeds maximum.")
+        rev_grid_support = max_revenue
+    # Update total revenue
+    revenue_yr = revenue_yr + rev_grid_support
 
     # Revenue from export
+    # Get rid of any earnings from grid support
+    # otherwise will be double counted
+    export_only_df = export_only_df - grid_support_arr
+
+    # Loop through the dataframe by days
+    day_export_lim = customer_model.price_pv_export_threshold
+    for day in range(0, 365):
+        # Update this so it looks at just one day
+        export_day = export_only_df
+        # Calculate revenue for export before daily limit
+        # Loop through by hour
+        revenue_day = 0.0
+        export_day_tot = 0.0
+        for hr in range(0, 24):
+            # Calculate hourly revenue
+            pass
+        # Calculate revenue for remaining export
 
     # Revenue from any bonuses
+    # Origin just gives a one-off sign up bonus
+    revenue_bonus = 0.0
+    if first_yr:
+        revenue_bonus = revenue_bonus + customer_model.bonus_signup
+    # No monthly bonus for Origin, below is for later code
+    revenue_bonus = revenue_bonus + 12*customer_model.bonus_monthly
 
-    # Cost calcs
-
+    #====Cost calcs====
     # Daily or monthly fees
+    # In object creation these are zero by default
+    daily_fees = 365*customer_model.chargeDay
+    monthly_fees = 12*customer_model.chargeMonth
+    # Update total cost
+    cost_yr = cost_yr + daily_fees + monthly_fees
 
     # Cost from imports
 
-    return 0.0
+    #====Profit calcs====
+    profit_yr = revenue_yr - cost_yr
+
+    return profit_yr
