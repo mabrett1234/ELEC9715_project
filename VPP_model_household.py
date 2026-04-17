@@ -57,16 +57,16 @@ class Household:
 
     def combine_demand(self):
         # Assuming CL column exists.
-        household.data['load'] = self.data['GC'] + self.data['CL']
+        self.data['load'] = self.data['GC'] + self.data['CL']
 
     def calc_bess_data(self):
-        n = len(household.data.index)
+        n = len(self.data.index)
         soc = np.zeros(n)            # State of Charge (kWh)
         charge = np.zeros(n)         # Charging energy (kWh)
         discharge = np.zeros(n)      # Discharging energy (kWh)
 
         # Set initial SoC
-        soc[0] = household.bessSocInit
+        soc[0] = self.bessSocInit
 
         # BESS operation loop
         for t in range(1, n):
@@ -96,16 +96,17 @@ class Household:
                 soc[t] = self.bessSocMin
 
         # Append BESS data to dataframe
-        self.data['BESS SoC (kWh)'] = soc   # State of Charge of BESS
-        self.data['BESS Charge (kWh)'] = charge     # Amount of kWh that BESS charges
-        self.data['BESS Discharge (kWh)'] = discharge   # Amount of kWh BESS discharges
+        self.data['BESS SoC (kWh)'] = soc   # State of Charge
+        self.data['BESS Charge (kWh)'] = charge # kWh charges
+        self.data['BESS Discharge (kWh)'] = discharge # kWh discharges
 
     def write_to_excel(self, fName):
-        # Write back to Excel (overwrite file with new columns appended)
+        # Delete old record if it exists
         try:
             os.remove("{}.xlsx".format(fName))
         except OSError:
             pass
+        # Write to new file
         with pd.ExcelWriter(
                             "{}.xlsx".format(fName),
                             engine='openpyxl',
@@ -154,25 +155,6 @@ def Household_from_df(df):
     )
     household.clean_data()
     return household
-
-# Main: read in data and use class + methods to do bess operation
-
-# Initial test: Just using only one household
-house_data = import_household_data("vic_house_data.xlsx", 2)
-
-# Convert into a household object
-household = Household_from_df(house_data)
-
-# Code to generate data for BESS given PV and load demand
-
-# Combine the demand
-household.combine_demand()
-
-# Calculate the bess data
-household.calc_bess_data()
-
-# Write the data to excel
-household.write_to_excel("vic_house_data_with_bess")
 
 """
 # BESS model parameters (user-defined)
