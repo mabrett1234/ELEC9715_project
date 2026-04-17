@@ -9,6 +9,10 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+# Other python files
+import VPP_model_household as house
+import VPP_model_NEM as nem
+
 # Classes
 class CustomerModel:
     """
@@ -63,7 +67,6 @@ def model_setup_agl():
 def model_setup_globird():
     pass
 
-# Code dump - to be cleaned into functions, classes, methods blah
 # Put the Origin VPP price structure into a model
 
 """
@@ -166,3 +169,84 @@ globird_vic = CustomerModel(
                     soc_min_flag=False, # Not able to change soc minimmum
                     label="Globird ZEROHERO"
 )
+
+
+# TODO: Generate timeseries arrays for:
+    # Export
+    # Import
+
+# Using:
+    # origin VPP rules
+    # Household object
+    # Spot price timeseries*
+
+
+#==========Spot price data==========
+spot_data = nem.import_spot_data("nem_spot_data_fy12.xlsx", 0)
+
+# Initial test: Just using only one household
+house_data = house.excel_to_df("house_individual_data.xlsx", 0)
+# Convert into a household object
+household = house.Household_from_df(house_data)
+# Combine the demand
+household.combine_demand()
+
+# Operation for a 30 min interval
+def bess_operation_origin(
+                            soc_max=0.0,
+                            soc_min=0.0,
+                            soc_prev=0.0,
+                            pv_gen=0.0,
+                            demand=0.0,
+                            spot_price=0.0
+):
+        charge = 0.0
+        discharge = 0.0
+        # Net energy balance (kWh over 30 min)
+        net_energy = pv_gen - demand
+        # Case 1: Excess PV -> charge BESS
+        available_capacity = soc_max - soc_prev
+        available_energy = soc_prev - soc_min
+        # all elements set to zero already
+
+        # Case 1: Excess PV -> charge BESS
+        if net_energy > 0:
+            charge = min(net_energy, available_capacity)
+        # Case 2: Not enough PV -> discharge BESS
+        elif net_energy < 0:
+            discharge = min(-net_energy, max(available_energy, 0))
+        # Update SoC
+        soc = soc_prev + charge - discharge
+        # Enforce bounds (safety check)
+        soc = min(soc, soc_max)
+        soc = max(soc, soc_min)
+        return [charge, discharge, soc]
+
+# Function looping over whole year
+def calc_bess_data_origin(household, spot_data):
+    n = len(household.data.index)
+    soc = np.zeros(n)            # State of Charge (kWh)
+    charge = np.zeros(n)         # Charging energy (kWh)
+    discharge = np.zeros(n)      # Discharging energy (kWh)
+
+    # Set initial SoC
+    soc[0] = household.bessSocInit
+
+    # BESS operation loop
+    for t in range(1, n):
+        bess_data = bess_operation_origin(
+                                soc_min=household.bessCapacity,
+                                soc_max=household.bessSocMin,
+                                soc_prev=soc[t-1],
+                                pv_gen=household.data['PV'].iloc[t],
+                                demand=household.data['PV'].iloc[t],
+                                spot_price=spot_data.iloc[t]
+        )
+        charge[t] = bess_data[0]
+        discharge[t] = bess_data[1]
+        soc[t] = bess_data[2]
+
+    # Append BESS data to dataframe
+    household.data['BESS SoC (kWh)'] = soc   # State of Charge
+    household.data['BESS Charge (kWh)'] = charge # kWh charges
+    household.data['BESS Discharge (kWh)'] = discharge # kWh discharges
