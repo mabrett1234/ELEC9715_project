@@ -192,7 +192,6 @@ def bess_operation_origin(
     USING ORIGIN MODEL OF VPP
     This function decides bess operation over a 30min interval.
     """
-
     max_grid_support = customer_model.exportMax
     charge = 0.0
     discharge = 0.0
@@ -202,8 +201,9 @@ def bess_operation_origin(
     net_demand = demand - pv_gen
     charge_max = soc_max - soc_prev # Available capacity to charge
     discharge_max = soc_prev - soc_min # Available energy to discharge
-    #if dbug_lvl > 0:
-    print("Demand before PV Gen = {:.2f} kWh, after = {:.2f} kWh".format(demand, net_demand))
+    if dbug_lvl > 0:
+        print("Demand before PV Gen = {:.2f} kWh".format(demand))
+        print("after = {:.2f} kWh".format(net_demand))
     # Self consumption and PV export to grid.
     # In grid event, all available PV is exported
     # Case 1: Still demand after PV gen used
@@ -222,6 +222,7 @@ def bess_operation_origin(
             grid_support_total < max_grid_support
             ):
             # Export any PV to the grid
+            print("Grid event: Exporting excess PV to grid.")
             max_export = max_grid_support - grid_support_total
             grid_support = min(-net_demand, max_export)
             export = export + grid_support
@@ -249,6 +250,7 @@ def bess_operation_origin(
         grid_event and
         grid_support_total < max_grid_support
     ):
+        print("Grid event: discharging battery to the grid.")
         max_export = max_grid_support - grid_support_total
         discharge_to_grid = min(discharge_max, max_export)
         # Update discharge so SoC is accurate
@@ -263,31 +265,35 @@ def bess_operation_origin(
     # TODO: Print message if any bounds exceeded.
     #soc = min(soc, soc_max)
     #soc = max(soc, soc_min)
-    if export > 0.0:
+    if dbug_lvl > 0 and export > 0.0:
         print("OMG EXPORTING TO THE GRID YAYAYAYAY")
-    elif export < 0.0:
+    elif dbug_lvl > 0 and export < 0.0:
         print("ughhh have to import from the grid")
     return [charge, discharge, soc, export, grid_support]
 
 # Function looping over whole year
-def calc_bess_data_origin(household, customer_model, spot_data):
+def calc_bess_data_origin(
+                            household,
+                            customer_model,
+                            spot_data,
+                            grid_events
+                            ):
     n = len(household.data.index)
     soc = np.zeros(n)            # State of Charge (kWh)
     charge = np.zeros(n)         # Charging energy (kWh)
     discharge = np.zeros(n)      # Discharging energy (kWh)
     export = np.zeros(n)
     grid_support = np.zeros(n)
-
     # Set initial SoC
     soc[0] = household.bessSocInit
 
     # BESS operation loop
     grid_support_total = 0.0
     for t in range(1, n):
-        # TODO: Identify it is a grid event
-        # Can use FCAS or spot price data
-        grid_event = False
         #print("at t = {} spot price = {}".format(t, spot_data.iloc[t]))
+        grid_event_flag = False
+        if grid_events.iloc[t,0] == 1:
+            grid_event_flag = True
         bess_data = bess_operation_origin(
                                 customer_model,
                                 soc_min=household.bessSocMin,
@@ -296,7 +302,7 @@ def calc_bess_data_origin(household, customer_model, spot_data):
                                 pv_gen=household.data['PV'].iloc[t],
                                 demand=household.data['load'].iloc[t],
                                 spot_price=spot_data.iloc[t],
-                                grid_event=grid_event,
+                                grid_event=grid_event_flag,
                                 grid_support_total=grid_support_total
         )
         charge[t] = bess_data[0]
@@ -312,6 +318,7 @@ def calc_bess_data_origin(household, customer_model, spot_data):
     household.data['Discharge (kWh)'] = discharge # kWh discharges
     household.data['Export (kWh)'] = export
     household.data['Grid Support (kWh)'] = grid_support
+    print("Grid event total = {}".format(grid_support_total))
 
 def customer_cost_calc_origin(
                                 customer_model,
@@ -398,7 +405,7 @@ def customer_cost_calc_origin(
 
 #==========Spot price data==========
 spot_data = nem.import_spot_data("nem_spot_data_fy12.xlsx", 0)
-
+grid_events = nem.identify_grid_events(spot_data, 10)
 # Initial test: Just using only one household
 house_data = house.excel_to_df("house_individual_data.xlsx", 0)
 # Convert into a household object
@@ -464,7 +471,7 @@ soc = bess_cap
 print("Export = {} kWh".format(export))
 """
 # Calculate the operation - no grid events yet
-calc_bess_data_origin(household, origin_vic, spot_data)
+calc_bess_data_origin(household, origin_vic, spot_data, grid_events)
 
 # Write the household data to excel to check
 household.write_to_excel("household_individual_origin_vpp")
@@ -472,5 +479,4 @@ household.write_to_excel("household_individual_origin_vpp")
 # Identify times when origin will request battery discharge
     # Maybe look at FCAS contingency events?
     # Otherwise take highest prices
-
 
