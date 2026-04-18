@@ -201,7 +201,7 @@ def bess_operation_origin(
     net_demand = demand - pv_gen
     charge_max = soc_max - soc_prev # Available capacity to charge
     discharge_max = soc_prev - soc_min # Available energy to discharge
-    if dbug_lvl > 0:
+    if dbug_lvl > 1:
         print("Demand before PV Gen = {:.2f} kWh".format(demand))
         print("after = {:.2f} kWh".format(net_demand))
     # Self consumption and PV export to grid.
@@ -220,9 +220,10 @@ def bess_operation_origin(
     elif net_demand < 0:
         if (grid_event and
             grid_support_total < max_grid_support
-            ):
+        ):
             # Export any PV to the grid
-            print("Grid event: Exporting excess PV to grid.")
+            if dbug_lvl > 0:
+                print("Grid event: Exporting excess PV gen.")
             max_export = max_grid_support - grid_support_total
             grid_support = min(-net_demand, max_export)
             export = export + grid_support
@@ -233,24 +234,25 @@ def bess_operation_origin(
                 charge = charge_max
                 # Export any leftover
                 export = -net_demand + charge
-                if dbug_lvl > 0:
+                if dbug_lvl > 1:
                     print("Charging battery until full.")
             else:
                 # Charge battery til PV gen runs out
                 charge = -net_demand
-                if dbug_lvl > 0:
+                if dbug_lvl > 1:
                     print("Charging battery with remaining PV generation")
                     print("charging battery {} kWh".format(charge))
             charge_max = charge_max - charge
     # If grid event, discharge battery into grid
     # Include any PV export
     grid_support_total = grid_support_total + grid_support
-    if(
+    if (
         export >=0.0 and # Can't export if drawing from grid
         grid_event and
         grid_support_total < max_grid_support
     ):
-        print("Grid event: discharging battery to the grid.")
+        if dbug_lvl > 0:
+            print("Grid event: discharging battery into grid.")
         max_export = max_grid_support - grid_support_total
         discharge_to_grid = min(discharge_max, max_export)
         # Update discharge so SoC is accurate
@@ -265,9 +267,9 @@ def bess_operation_origin(
     # TODO: Print message if any bounds exceeded.
     #soc = min(soc, soc_max)
     #soc = max(soc, soc_min)
-    if dbug_lvl > 0 and export > 0.0:
+    if dbug_lvl > 1 and export > 0.0:
         print("OMG EXPORTING TO THE GRID YAYAYAYAY")
-    elif dbug_lvl > 0 and export < 0.0:
+    elif dbug_lvl > 1 and export < 0.0:
         print("ughhh have to import from the grid")
     return [charge, discharge, soc, export, grid_support]
 
@@ -277,7 +279,7 @@ def calc_bess_data_origin(
                             customer_model,
                             spot_data,
                             grid_events
-                            ):
+):
     n = len(household.data.index)
     soc = np.zeros(n)            # State of Charge (kWh)
     charge = np.zeros(n)         # Charging energy (kWh)
@@ -318,29 +320,30 @@ def calc_bess_data_origin(
     household.data['Discharge (kWh)'] = discharge # kWh discharges
     household.data['Export (kWh)'] = export
     household.data['Grid Support (kWh)'] = grid_support
-    print("Grid event total = {}".format(grid_support_total))
+    print("Grid event total = {:.2f}".format(grid_support_total))
 
-def customer_cost_calc_origin(
-                                customer_model,
-                                charge_arr,
-                                discharge_arr,
-                                export_df,
-                                grid_support_arr,
-                                first_yr=True
+def calc_cost_origin(
+                        customer_model,
+                        household,
+                        first_yr=True
 ):
+    print("Export prices:")
+    print(customer_model.priceExport)
     revenue_yr = 0.0
     cost_yr = 0.0
     profit_yr = 0.0
+    n = len(household.data.index)
     # Split export into positive and negative arrays
-    import_df = -export_df
-    import_df = import_df.clip(0)
-    export_only_df = export_df.clip(0)
+    household.data['Import (kWh)'] = -household.data['Export (kWh)']
+    household.data['Import (kWh)'] = household.data['Import (kWh)'].clip(0)
+    household.data['Export (kWh)'] = household.data['Export (kWh)'].clip(0)
 
     #====Revenue calcs====
 
     # Revenue from grid support
-    rev_grid_support = customer_model.price_vpp_use*grid_support_arr.sum()
-    max_revenue = customer_model.price_vpp_use*customer_model.export_max_yr
+    grid_support_total = household.data['Grid Support (kWh)'].sum()
+    rev_grid_support = customer_model.price_vpp_use*grid_support_total
+    max_revenue = customer_model.price_vpp_use*customer_model.exportMax
     # Double check
     if rev_grid_support > max_revenue:
         print("ERR: bess operation not within retailer rules")
@@ -352,22 +355,33 @@ def customer_cost_calc_origin(
     # Revenue from export
     # Get rid of any earnings from grid support
     # otherwise will be double counted
-    export_only_df = export_only_df - grid_support_arr
+    
+    household.data['Self Export (kWh)'] = household.data['Export (kWh)'] - household.data['Grid Support (kWh)']
 
     # Loop through the dataframe by days
     day_export_lim = customer_model.pvThreshold
+    export_yr = household.data['Self Export (kWh)']
+    #print(export_yr)
+    revenue_export = 0.0
     for day in range(0, 365):
-        # Update this so it looks at just one day
-        export_day = export_only_df
-        # Calculate revenue for export before daily limit
+        offset = day*24
+        export_day = export_yr.iloc[offset:(offset+24)]
         # Loop through by hour
         revenue_day = 0.0
         export_day_tot = 0.0
         for hr in range(0, 24):
+            price = customer_model.priceExport[hr, 0]
+            if export_day_tot > day_export_lim:
+                price = customer_model.priceExport[hr, 1]
+            #print("price = {:.2f}".format(price))
             # Calculate hourly revenue
-            pass
-        # Calculate revenue for remaining export
-
+            export_hr = export_day.iloc[hr*2:(hr*2+1)].sum()
+            revenue_hr = price*export_hr
+            # Update totals
+            revenue_day = revenue_day + revenue_hr
+            export_day_tot = export_day_tot + export_hr
+        revenue_export = revenue_export + revenue_day
+    print("Revenue from export = ${:.2f}/yr".format(revenue_export))
     # Revenue from any bonuses
     # Origin just gives a one-off sign up bonus
     revenue_bonus = 0.0
@@ -385,11 +399,31 @@ def customer_cost_calc_origin(
     cost_yr = cost_yr + daily_fees + monthly_fees
 
     # Cost from imports
-
+    import_yr = household.data['Import (kWh)']
+    import_day_tot = 0.0
+    cost_import = 0.0
+    cost_day = 0.0
+    for day in range(0, 365):
+        offset = day*24
+        import_day = import_yr.iloc[offset:(offset+24)]
+        # Loop through by hour
+        cost_day = 0.0
+        import_day_tot = 0.0
+        for hr in range(0, 24):
+            price = customer_model.priceImport[hr]
+            # Calculate hourly cost
+            import_hr = import_day.iloc[hr*2:(hr*2+1)].sum()
+            cost_hr = price*import_hr
+            # Update totals
+            cost_day = cost_day + cost_hr
+            import_day_tot = import_day_tot + import_hr
+        cost_import = cost_import + cost_day
+    print("Cost from import = ${:.2f}/yr".format(cost_import))
+    cost_yr = cost_yr + cost_import
     #====Profit calcs====
     profit_yr = revenue_yr - cost_yr
-
-    return profit_yr
+    print(profit_yr)
+    return float(profit_yr)
 
 #===========MAIN===========
 
@@ -405,7 +439,7 @@ def customer_cost_calc_origin(
 
 #==========Spot price data==========
 spot_data = nem.import_spot_data("nem_spot_data_fy12.xlsx", 0)
-grid_events = nem.identify_grid_events(spot_data, 10)
+grid_events = nem.identify_grid_events(spot_data, 15)
 # Initial test: Just using only one household
 house_data = house.excel_to_df("house_individual_data.xlsx", 0)
 # Convert into a household object
@@ -422,61 +456,12 @@ household = house.Household_from_df(
 
 # Combine the demand
 household.combine_demand()
-"""
-# Test some shit
-# Charging
-soc = 10.0
-for i in range(0, 10):
-    print("Battery state of charge = {} kW".format(soc))
-    [charge, discharge, soc, export, grid_support] = bess_operation_origin(
-                                origin_vic,
-                                soc_max=bess_cap,
-                                soc_min=soc_min,
-                                soc_prev=soc,
-                                pv_gen=6.0,
-                                demand=1.0,
-                                dbug_lvl=2
-    )
-    print("Export = {} kWh".format(export))
-
-# Discharging
-for i in range(0, 10):
-    print("Battery state of charge = {} kW".format(soc))
-    [charge, discharge, soc, export, grid_support] = bess_operation_origin(
-                                origin_vic,
-                                soc_max=bess_cap,
-                                soc_min=soc_min,
-                                soc_prev=soc,
-                                pv_gen=0.0,
-                                demand=5.0,
-                                dbug_lvl=2
-    )
-    print("Export = {} kWh".format(export))
-
-# Grid support
-grid_support_total = 0.0
-print("Battery state of charge = {} kW".format(soc))
-soc = bess_cap
-[charge, discharge, soc, export, grid_support] = bess_operation_origin(
-                            origin_vic,
-                            soc_max=bess_cap,
-                            soc_min=soc_min,
-                            soc_prev=soc,
-                            pv_gen=3.0,
-                            demand=5.0,
-                            dbug_lvl=2,
-                            grid_event=True,
-                            grid_support_total=grid_support_total
-)
-print("Export = {} kWh".format(export))
-"""
 # Calculate the operation - no grid events yet
 calc_bess_data_origin(household, origin_vic, spot_data, grid_events)
 
+# Calculate the bill
+profit = calc_cost_origin(origin_vic, household, first_yr=False)
+print("Bill for FY 2012 - 2013 for origin VPP was ${:.2f}".format(-profit))
+
 # Write the household data to excel to check
 household.write_to_excel("household_individual_origin_vpp")
-
-# Identify times when origin will request battery discharge
-    # Maybe look at FCAS contingency events?
-    # Otherwise take highest prices
-
