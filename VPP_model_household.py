@@ -170,23 +170,3 @@ def Household_from_df(
     )
     household.clean_data()
     return household
-
-"""
-# BESS model parameters (user-defined)
-bess_capacity = float(input("Enter BESS capacity (kWh): "))   # kWh
-bess_min_soc = float(input("Enter minimum SoC (kWh): "))    # kWh (reserve level)
-bess_init_soc = float(input("Enter initial SoC (kWh): "))  # kWh (initial state of charge)
-
-# Validate inputs
-if bess_capacity <= 0:
-    raise ValueError("BESS capacity <= 0")
-
-if bess_soc_min < 0 or bess_min_soc > bess_capacity:
-    raise ValueError("Minimum SoC not between 0 and capacity")
-
-if (
-    bess_soc_init < bess_soc_min or
-    bess_soc_init > bess_capacity
-):
-    raise ValueError("Initial SoC not between min SoC and capacity")
-"""

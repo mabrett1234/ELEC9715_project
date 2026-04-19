@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+""""
 class CustomerModelAmber:
 
     def __init__(
@@ -20,4 +21,5 @@ class CustomerModelAmber:
             self.label = label
 
     def __str__(self):
-        print("Type: CustomerModelAmber, Name: {}".format(self.label))
+         return "Type: CustomerModelAmber, Name: {}".format(self.label)
+"""
