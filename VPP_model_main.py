@@ -12,6 +12,7 @@ import VPP_model_household as house
 import VPP_model_NEM as nem
 import VPP_model_customer as customer
 import VPP_origin as origin
+import VPP_amber as amber
 
 
 #==========Main==========
@@ -66,3 +67,37 @@ print("Bill for FY 2012 - 2013 for origin VPP was", end="")
 print(" ${:.2f}.".format(-origin_profit))
 # Write to excel
 household.write_to_excel("household_individual_origin_vpp")
+
+#=========VPP cost: Amber=========
+# Reset the dataframe by importing from the excel
+
+# Initial test: Just using only one household
+house_data = house.excel_to_df("house_individual_data.xlsx", 0)
+# Convert into a household object
+household = house.Household_from_df(
+                                    house_data,
+                                    pv_capacity=6.0,#kW
+                                    bess_capacity=30.0,#kWh
+                                    bess_soc_min=(30.0*0.2),
+                                    bess_soc_init=30.0
+)
+# Combine the demand
+household.combine_demand()
+
+# Update the bess minimum state of charge to match origin VPP rules
+household.bessSocMin = household.bessCapacity*origin_model.socMin
+
+#
+amber.calc_bess_data(
+
+                        household,
+                        origin_model,
+                        spot_data,
+)
+
+amber.calc_cost(
+
+)
+
+# Write to excel
+household.write_to_excel("household_individual_amber_vpp")
