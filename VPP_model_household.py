@@ -36,6 +36,7 @@ class Household:
                 bess_soc_init=BESS_SOC_INIT_DEFAULT,
                 label=None
     ):
+        print("Creating household class...")
         self.pvCapacity = pv_cap
         # Just going to use defaults for these for most analysis
         self.bessCapacity = bess_capacity
@@ -49,6 +50,7 @@ class Household:
                                         "CL":cl_arr
                                     }
         )
+        self.combine_demand()
         if label != None:
             self.label = label
         else:
@@ -63,20 +65,28 @@ class Household:
 
     def combine_demand(self):
         # Assuming CL column exists.
+        print("Combining CL and GC into total demand")
         self.data['load'] = self.data['GC'] + self.data['CL']
 
+    def split_export(self):
+        # Split export into positive and negative arrays
+        print("Splitting net export into +ve import and export")
+        self.data['Import (kWh)'] = -self.data['Export (kWh)']
+        self.data['Import (kWh)'] = self.data['Import (kWh)'].clip(0)
+        self.data['Export (kWh)'] = self.data['Export (kWh)'].clip(0)
     def calc_bess_data(self):
+        print("Calculating self consumption bess operation")
         n = len(self.data.index)
         soc = np.zeros(n)            # State of Charge (kWh)
         charge = np.zeros(n)         # Charging energy (kWh)
         discharge = np.zeros(n)      # Discharging energy (kWh)
-
+        export = np.zeros(n)         # Exported energy (kWh)
         # Set initial SoC
         soc[0] = self.bessSocInit
-
         # BESS operation loop
         for t in range(1, n):
             # Net energy balance (kWh over 30 min)
+            # This is generation!
             net_energy = self.data['PV'].iloc[t] - self.data['load'].iloc[t]
 
             # Case 1: Excess PV -> charge BESS
@@ -87,12 +97,21 @@ class Household:
             # Case 1: Excess PV -> charge BESS
             if net_energy > 0:
                 charge[t] = min(net_energy, available_capacity)
+                # Update remaining generation
+                net_energy = net_energy - charge[t]
+                # TODO: Calculate export
             # Case 2: Not enough PV -> discharge BESS
             elif net_energy < 0:
                 discharge[t] = min(
                                     -net_energy,
                                 max(available_energy, 0)
                 )
+                # Update remaining generation
+                # Will be zero if bess meets demand
+                # Otherwise negative
+                net_energy = net_energy + discharge[t]
+            # Update export
+            export[t] = net_energy
             # Update SoC
             soc[t] = soc[t-1] + charge[t] - discharge[t]
             # Enforce bounds (safety check)
@@ -105,6 +124,8 @@ class Household:
         self.data['SoC (kWh)'] = soc   # State of Charge
         self.data['BESS Charge (kWh)'] = charge # kWh charges
         self.data['BESS Discharge (kWh)'] = discharge # kWh discharges
+        self.data['Export (kWh)'] = export
+        self.split_export()
 
     def write_to_excel(self, fName):
         # Delete old record if it exists

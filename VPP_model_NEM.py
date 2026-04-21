@@ -82,3 +82,5 @@ def calc_cost(
     household.data['Spot Revenue ($)'] = revenue_export_arr
     household.data['Spot Cost ($)'] = cost_import_arr
     household.data['Spot Profit ($)'] = profit_spot_arr
+    print("Total Spot Profit = ", end = "")
+    print("${:.2f}/yr".format(profit_spot_arr.sum()))

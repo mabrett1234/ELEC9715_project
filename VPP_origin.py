@@ -119,10 +119,11 @@ def bess_operation(
 
 # Function looping over whole year
 def calc_bess_data(
-                            household,
-                            customer_model,
-                            grid_events
+                    household,
+                    customer_model,
+                    grid_events
 ):
+    print("Calculating VPP household operation")
     n = len(household.data.index)
     soc = np.zeros(n)            # State of Charge (kWh)
     charge = np.zeros(n)         # Charging energy (kWh)
@@ -131,7 +132,6 @@ def calc_bess_data(
     grid_support = np.zeros(n)   # Grid support (kWh)
     # Set initial SoC
     soc[0] = household.bessSocInit
-
     # BESS operation loop
     grid_support_total = 0.0
     for t in range(1, n):
@@ -156,6 +156,10 @@ def calc_bess_data(
         grid_support[t] = bess_data[4]
         # Update grid support total
         grid_support_total = grid_support_total + grid_support[t]
+        if grid_event_flag:
+            print("Grid event: ", end = "")
+            print("Exported {:.2f} kWh".format(grid_support[t]))
+            print("total = {:.2f}".format(grid_support_total))
 
     # Append BESS data to dataframe
     household.data['SoC (kWh)'] = soc   # State of Charge
@@ -163,18 +167,20 @@ def calc_bess_data(
     household.data['Discharge (kWh)'] = discharge # kWh discharges
     household.data['Export (kWh)'] = export
     household.data['Grid Support (kWh)'] = grid_support
+    household.split_export()
     print("Grid event total = {:.2f} kWh".format(grid_support_total))
 
 def calc_cost(
                 customer_model,
-                household
+                household,
+                baseline_flag=True
 ):
     n = len(household.data.index)
-
+    if baseline_flag == True:
+        household.data['Grid Support (kWh)'] = np.zeros(n)
     #==Revenue from grid support==
     grid_supp_arr = household.data['Grid Support (kWh)'].to_numpy()
     rev_grid_supp_arr = customer_model.price_vpp_use*grid_supp_arr
-
     #==Revenue from export and import==
     # Get rid of any export for grid support
     # otherwise double counted
@@ -222,6 +228,7 @@ def calc_cost(
     household.data['Total Cost ($)'] = cost_tot_arr
     household.data['Total Revenue ($)'] = rev_tot_arr
     household.data['Total Profit ($)'] = profit_tot_arr
+    print("Total Profit = ${:.2f}/yr".format(profit_tot_arr.sum()))
 
 def model_setup():
     # Put the Origin VPP price structure into a model
