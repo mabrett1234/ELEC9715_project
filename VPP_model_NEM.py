@@ -16,7 +16,6 @@ from matplotlib import pyplot as plt
 
 # Other libraries
 import VPP_model_household as house
-import VPP_origin as origin
 
 # Classes and methods
 

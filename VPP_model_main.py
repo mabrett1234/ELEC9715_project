@@ -91,13 +91,6 @@ origin_model = origin.model_setup()
 print(origin_model) # print to check
 # Update the bess minimum state of charge to match origin VPP rules
 
-# Import the full household data
-df = house.excel_to_df("household_data_full.xlsx", 0)
-
-
-# Loop through the models?
-
-
 
 """
 run_model_individual(

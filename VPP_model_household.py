@@ -74,6 +74,7 @@ class Household:
         self.data['Import (kWh)'] = -self.data['Export (kWh)']
         self.data['Import (kWh)'] = self.data['Import (kWh)'].clip(0)
         self.data['Export (kWh)'] = self.data['Export (kWh)'].clip(0)
+    
     def calc_bess_data(self):
         print("Calculating self consumption bess operation")
         n = len(self.data.index)
