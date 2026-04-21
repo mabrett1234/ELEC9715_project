@@ -17,7 +17,10 @@ import VPP_model_customer as customer
 # Functions
 
 #====Functions for VPP operation calcs====
-
+# TODO (non urgent): Really confusing use of 
+# capacity, SoC, kW vs. kWh
+# Could clean up to be more explicit and less likely
+# For errors
 def bess_operation(
                             customer_model,
                             soc_max=0.0,
@@ -27,7 +30,6 @@ def bess_operation(
                             demand=0.0,
                             grid_event=False,
                             grid_support_total=0.0,
-                            spot_price=0.0,
                             dbug_lvl=0
 ):
     """
@@ -119,22 +121,20 @@ def bess_operation(
 def calc_bess_data(
                             household,
                             customer_model,
-                            spot_data,
                             grid_events
 ):
     n = len(household.data.index)
     soc = np.zeros(n)            # State of Charge (kWh)
     charge = np.zeros(n)         # Charging energy (kWh)
     discharge = np.zeros(n)      # Discharging energy (kWh)
-    export = np.zeros(n)
-    grid_support = np.zeros(n)
+    export = np.zeros(n)         # Exported energy (kWh)
+    grid_support = np.zeros(n)   # Grid support (kWh)
     # Set initial SoC
     soc[0] = household.bessSocInit
 
     # BESS operation loop
     grid_support_total = 0.0
     for t in range(1, n):
-        #print("at t = {} spot price = {}".format(t, spot_data.iloc[t]))
         grid_event_flag = False
         if grid_events.iloc[t,0] == 1:
             grid_event_flag = True
@@ -145,15 +145,16 @@ def calc_bess_data(
                                 soc_prev=soc[t-1],
                                 pv_gen=household.data['PV'].iloc[t],
                                 demand=household.data['load'].iloc[t],
-                                spot_price=spot_data.iloc[t],
                                 grid_event=grid_event_flag,
                                 grid_support_total=grid_support_total
         )
+        # Update array values - could clean up by using a class
         charge[t] = bess_data[0]
         discharge[t] = bess_data[1]
         soc[t] = bess_data[2]
         export[t] = bess_data[3]
         grid_support[t] = bess_data[4]
+        # Update grid support total
         grid_support_total = grid_support_total + grid_support[t]
 
     # Append BESS data to dataframe
@@ -162,104 +163,65 @@ def calc_bess_data(
     household.data['Discharge (kWh)'] = discharge # kWh discharges
     household.data['Export (kWh)'] = export
     household.data['Grid Support (kWh)'] = grid_support
-    print("Grid event total = {:.2f}".format(grid_support_total))
+    print("Grid event total = {:.2f} kWh".format(grid_support_total))
 
 def calc_cost(
                 customer_model,
-                household,
-                first_yr=True
+                household
 ):
-    revenue_yr = 0.0
-    cost_yr = 0.0
-    profit_yr = 0.0
     n = len(household.data.index)
 
-    # TODO: Make all the earnings visible by using arrays
-    # And adding to dataframe
+    #==Revenue from grid support==
+    grid_supp_arr = household.data['Grid Support (kWh)'].to_numpy()
+    rev_grid_supp_arr = customer_model.price_vpp_use*grid_supp_arr
 
-    #====Revenue calcs====
-    # Revenue from grid support
-    grid_support_total = household.data['Grid Support (kWh)'].sum()
-    rev_grid_support = customer_model.price_vpp_use*grid_support_total
-    max_revenue = customer_model.price_vpp_use*customer_model.exportMax
-    # Double check
-    if rev_grid_support > max_revenue:
-        print("ERR: bess operation not within retailer rules")
-        print("Issue with grid support calc: exceeds maximum.")
-        rev_grid_support = max_revenue
-    # Update total revenue
-    revenue_yr = revenue_yr + rev_grid_support
-
-    # Revenue from export
-    # Get rid of any earnings from grid support
-    # otherwise will be double counted
+    #==Revenue from export and import==
+    # Get rid of any export for grid support
+    # otherwise double counted
     household.data['Self Export (kWh)'] = household.data['Export (kWh)'] - household.data['Grid Support (kWh)']
-
-    # Loop through the dataframe by days
+    # Make some arrays
+    # For export calcs
+    export_arr = household.data['Self Export (kWh)']
+    rev_export_arr = np.zeros(n)
+    # For import calcs
+    import_arr = household.data['Import (kWh)'].to_numpy()
+    cost_import_arr = np.zeros(n)
+    # Export limit - defines pricing
     day_export_lim = customer_model.pvThreshold
-    export_yr = household.data['Self Export (kWh)']
-    #print(export_yr)
-    revenue_export = 0.0
+    # Loop through arrays in days
     for day in range(0, 365):
-        offset = day*24
-        export_day = export_yr.iloc[offset:(offset+24)]
-        # Loop through by hour
-        revenue_day = 0.0
-        export_day_tot = 0.0
-        for hr in range(0, 24):
-            price = customer_model.priceExport[hr, 0]
+        export_day_tot = 0.0 # Used for Export cap.
+        # Loop through day in 30min step
+        for t in range(0, 48):
+            price_ex_30min = customer_model.priceExport[int(t/2), 0]
+            price_im_30min = customer_model.priceImport[int(t/2)]
             if export_day_tot > day_export_lim:
-                price = customer_model.priceExport[hr, 1]
-            # Calculate hourly revenue
-            export_hr = export_day.iloc[hr*2:(hr*2+1)].sum()
-            revenue_hr = price*export_hr
+                price_ex_30min = customer_model.priceExport[int(t/2), 1]
+            # Calculate 30min revenue
+            rev_export_arr[day*t] = export_arr[day*t]*price_ex_30min/2
+            # Calculate 30min cost
+            cost_import_arr[day*t] = import_arr[day*t]*price_im_30min/2
             # Update totals
-            revenue_day = revenue_day + revenue_hr
-            export_day_tot = export_day_tot + export_hr
-        revenue_export = revenue_export + revenue_day
-    print("Revenue from export = ${:.2f}/yr".format(revenue_export))
-    # Revenue from any bonuses
-    # Origin just gives a one-off sign up bonus
-    revenue_bonus = 0.0
-    if first_yr:
-        revenue_bonus = revenue_bonus + customer_model.bonusSignup
-    # No monthly bonus for Origin, below is for later code
-    revenue_bonus = revenue_bonus + 12*customer_model.bonusMonthly
+            export_day_tot = export_day_tot + export_arr[day*t]
 
     #====Cost calcs====
-    # Daily or monthly fees
-    # In object creation these are zero by default
-    daily_fees = 365*customer_model.chargeDay
-    monthly_fees = 12*customer_model.chargeMonth
-    # Update total cost
-    cost_yr = cost_yr + daily_fees + monthly_fees
+    # Daily fees
+    daily_fee_arr = np.zeros(n)
+    for i in range(0, n):
+        if i % 48 == 0:
+            daily_fee_arr[i] = customer_model.chargeDay
 
-    # Cost from imports
-    import_yr = household.data['Import (kWh)']
-    import_day_tot = 0.0
-    cost_import = 0.0
-    cost_day = 0.0
-    for day in range(0, 365):
-        offset = day*24
-        import_day = import_yr.iloc[offset:(offset+24)]
-        # Loop through by hour
-        cost_day = 0.0
-        import_day_tot = 0.0
-        for hr in range(0, 24):
-            price = customer_model.priceImport[hr]
-            # Calculate hourly cost
-            import_hr = import_day.iloc[hr*2:(hr*2+1)].sum()
-            cost_hr = price*import_hr
-            # Update totals
-            cost_day = cost_day + cost_hr
-            import_day_tot = import_day_tot + import_hr
-        cost_import = cost_import + cost_day
-    print("Cost from import = ${:.2f}/yr".format(cost_import))
-    cost_yr = cost_yr + cost_import
-    #====Profit calcs====
-    profit_yr = revenue_yr - cost_yr
-    print(profit_yr)
-    return float(profit_yr)
+    #====Save data to data frame====
+    cost_tot_arr = daily_fee_arr + cost_import_arr
+    rev_tot_arr = rev_grid_supp_arr + rev_export_arr
+    profit_tot_arr = rev_tot_arr - cost_tot_arr
+    household.data['Export Revenue ($)'] = rev_export_arr
+    household.data['Grid Support Revenue ($)'] = rev_grid_supp_arr
+    household.data['Import Cost ($)'] = cost_import_arr
+    household.data['Daily fee cost ($)'] = daily_fee_arr
+    household.data['Total Cost ($)'] = cost_tot_arr
+    household.data['Total Revenue ($)'] = rev_tot_arr
+    household.data['Total Profit ($)'] = profit_tot_arr
 
 def model_setup():
     # Put the Origin VPP price structure into a model

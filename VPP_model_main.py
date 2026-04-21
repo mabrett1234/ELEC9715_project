@@ -57,7 +57,6 @@ household.bessSocMin = household.bessCapacity*origin_model.socMin
 origin.calc_bess_data(
                         household,
                         origin_model,
-                        spot_data,
                         grid_events
 )
 # Work out export and import
