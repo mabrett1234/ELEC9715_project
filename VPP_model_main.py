@@ -54,7 +54,7 @@ def run_model_individual(
     nem.calc_cost(household_noVPP, spot_data)
     # Save data to excel spreadsheet
     fname = "{}\\self_consume_{}".format(output_dir, ref_num)
-    household.write_to_excel(fname)
+    household_noVPP.write_to_excel(fname)
 
     #=========VPP behaviour=========
     # Calculate the bess operation over the year
