@@ -157,9 +157,11 @@ def calc_bess_data(
         # Update grid support total
         grid_support_total = grid_support_total + grid_support[t]
         if grid_event_flag:
+            """
             print("Grid event: ", end = "")
             print("Exported {:.2f} kWh".format(grid_support[t]))
             print("total = {:.2f}".format(grid_support_total))
+            """
 
     # Append BESS data to dataframe
     household.data['SoC (kWh)'] = soc   # State of Charge
