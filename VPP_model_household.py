@@ -102,7 +102,7 @@ class Household:
                 soc[t] = self.bessSocMin
 
         # Append BESS data to dataframe
-        self.data['BESS SoC (kWh)'] = soc   # State of Charge
+        self.data['SoC (kWh)'] = soc   # State of Charge
         self.data['BESS Charge (kWh)'] = charge # kWh charges
         self.data['BESS Discharge (kWh)'] = discharge # kWh discharges
 
@@ -173,7 +173,6 @@ def Household_from_df(
 
 def split_export(household):
     # Split export into positive and negative arrays
-    # Move this to a method within the household class
     household.data['Import (kWh)'] = -household.data['Export (kWh)']
     household.data['Import (kWh)'] = household.data['Import (kWh)'].clip(0)
     household.data['Export (kWh)'] = household.data['Export (kWh)'].clip(0)

@@ -174,6 +174,9 @@ def calc_cost(
     profit_yr = 0.0
     n = len(household.data.index)
 
+    # TODO: Make all the earnings visible by using arrays
+    # And adding to dataframe
+
     #====Revenue calcs====
     # Revenue from grid support
     grid_support_total = household.data['Grid Support (kWh)'].sum()

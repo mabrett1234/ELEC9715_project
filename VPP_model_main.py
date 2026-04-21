@@ -29,11 +29,17 @@ household = house.Household_from_df(
 )
 # Combine the demand
 household.combine_demand()
-# Calculate the bess data
-household.calc_bess_data()
-# Write the data to excel
-household.write_to_excel("house_individual_data_w_bess")
 
+#=========Calc self consumption behaviour=========
+# TODO: FIX THIS SO IT'S USEABLE
+# Calculate the bess data
+#household.calc_bess_data()
+# TODO: Work out cost info
+# Write the data to excel
+#household.write_to_excel("house_individual_data_w_bess")
+
+# Combine the demand
+household.combine_demand()
 #==========Spot price data==========
 # Import the spot price data
 spot_data = nem.import_spot_data("nem_spot_data_fy12.xlsx", 0)
@@ -63,15 +69,10 @@ origin_profit = origin.calc_cost(
                                     household,
                                     first_yr=False
 )
-# Print the total bill to terminal
-print("Bill for FY 2012 - 2013 for origin VPP was", end="")
-print(" ${:.2f}.".format(-origin_profit))
-# Write to excel
-household.write_to_excel("household_individual_origin_vpp")
 
 #=========VPP cost: spot market=========
-
 nem.calc_cost(household, spot_data)
 
+#=========Save the data=========
 # Write to excel
-household.write_to_excel("household_individual_amber_vpp")
+household.write_to_excel("individual_origin_w_spot_vpp")
