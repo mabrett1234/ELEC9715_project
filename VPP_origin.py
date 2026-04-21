@@ -12,7 +12,6 @@ from matplotlib import pyplot as plt
 
 # Other python files
 import VPP_model_household as house
-import VPP_model_NEM as nem
 import VPP_model_customer as customer
 
 # Functions
@@ -166,19 +165,14 @@ def calc_bess_data(
     print("Grid event total = {:.2f}".format(grid_support_total))
 
 def calc_cost(
-                        customer_model,
-                        household,
-                        first_yr=True
+                customer_model,
+                household,
+                first_yr=True
 ):
     revenue_yr = 0.0
     cost_yr = 0.0
     profit_yr = 0.0
     n = len(household.data.index)
-    # Split export into positive and negative arrays
-    # Move this to a method within the household class
-    household.data['Import (kWh)'] = -household.data['Export (kWh)']
-    household.data['Import (kWh)'] = household.data['Import (kWh)'].clip(0)
-    household.data['Export (kWh)'] = household.data['Export (kWh)'].clip(0)
 
     #====Revenue calcs====
     # Revenue from grid support

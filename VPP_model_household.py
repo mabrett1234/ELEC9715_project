@@ -170,3 +170,10 @@ def Household_from_df(
     )
     household.clean_data()
     return household
+
+def split_export(household):
+    # Split export into positive and negative arrays
+    # Move this to a method within the household class
+    household.data['Import (kWh)'] = -household.data['Export (kWh)']
+    household.data['Import (kWh)'] = household.data['Import (kWh)'].clip(0)
+    household.data['Export (kWh)'] = household.data['Export (kWh)'].clip(0)

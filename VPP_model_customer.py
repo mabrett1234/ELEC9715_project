@@ -9,10 +9,6 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-# Other python files
-import VPP_model_household as house
-import VPP_model_NEM as nem
-
 # Classes
 class CustomerModel:
     """
@@ -60,18 +56,3 @@ class CustomerModel:
 
     def __str__(self):
         return "Type: CustomerModel, Name: {}".format(self.label)
-
-
-#===========MAIN===========
-
-# Generate new columns for:
-    # Export
-    # Import
-    # Grid support
-    # Export earnings
-    # Import earnings
-
-# Using:
-    # origin VPP rules
-    # Household object
-    # Spot price timeseries*
