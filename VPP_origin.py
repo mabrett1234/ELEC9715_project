@@ -169,7 +169,6 @@ def calc_bess_data(
     household.data['Discharge (kWh)'] = discharge # kWh discharges
     household.data['Export (kWh)'] = export
     household.data['Grid Support (kWh)'] = grid_support
-    household.split_export()
     print("Grid event total = {:.2f} kWh".format(grid_support_total))
 
 def calc_cost(

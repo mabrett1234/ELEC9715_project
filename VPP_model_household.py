@@ -24,6 +24,7 @@ class Household:
     Organise data of one household to be easily accessible
     Try keep this structured so the VPP rules can be applied easily
     """
+    annual_totals = np.zeros(6)
 
     def __init__(
                 self,
@@ -115,18 +116,22 @@ class Household:
             export[t] = net_energy
             # Update SoC
             soc[t] = soc[t-1] + charge[t] - discharge[t]
-            # Enforce bounds (safety check)
-            if soc[t] > self.bessCapacity:
-                soc[t] = self.bessCapacity
-            if soc[t] < self.bessSocMin:
-                soc[t] = self.bessSocMin
 
         # Append BESS data to dataframe
         self.data['SoC (kWh)'] = soc   # State of Charge
         self.data['BESS Charge (kWh)'] = charge # kWh charges
         self.data['BESS Discharge (kWh)'] = discharge # kWh discharges
         self.data['Export (kWh)'] = export
-        self.split_export()
+
+    def calc_totals(self, ref_num):
+        # Can only be called after the calc cost in origin ting
+        print("Calculating annual totals.")
+        self.annual_totals[0] = ref_num
+        self.annual_totals[1] = self.data['Export (kWh)'].sum()
+        self.annual_totals[2] = self.data['Import (kWh)'].sum()
+        self.annual_totals[3] = self.data['Grid Support (kWh)'].sum()
+        self.annual_totals[4] = self.data['Total Profit ($)'].sum()
+        self.annual_totals[5] = self.data['Spot Profit ($)'].sum()
 
     def write_to_excel(self, fName):
         # Delete old record if it exists
@@ -193,8 +198,3 @@ def Household_from_df(
     household.clean_data()
     return household
 
-def split_export(household):
-    # Split export into positive and negative arrays
-    household.data['Import (kWh)'] = -household.data['Export (kWh)']
-    household.data['Import (kWh)'] = household.data['Import (kWh)'].clip(0)
-    household.data['Export (kWh)'] = household.data['Export (kWh)'].clip(0)
