@@ -21,12 +21,10 @@ def run_model_individual(
                             spot_data = None,
                             grid_event_arr = None,
                             ref_num=69,
+                            house_data=None,
                             input_dir='dataIn',
                             output_dir='dataOut'
 ):
-    # Import house data into a dataframe
-    fname = "{}\\house_data_{}.xlsx".format(input_dir, ref_num)
-    house_data = house.excel_to_df(fname, 0)
     # Convert into a household object
     household = house.Household_from_df(
                                         house_data,
@@ -92,13 +90,34 @@ print(origin_model) # print to check
 # Update the bess minimum state of charge to match origin VPP rules
 
 
-"""
-run_model_individual(
+#=====Household data=========
+
+# Import the full household data
+print("Importing household data. This may take some time.")
+df = house.excel_to_df("household_data_clean.xlsx", 0)
+t = pd.to_datetime(df.iloc[:, 0])
+df = df.set_index(t)
+df = df.iloc[:, 1:]
+print("Data imported.")
+
+n = int(len(df.columns)/3)
+
+for i in range(0, n):
+    # Get current household
+    df_curr = df.iloc[:,(i*3):((i+1)*3)]
+    ref_num = str(df_curr.columns[0])
+    ref_num = ref_num.split("_")[0]
+    # Update columns for readability
+    old_cols = df_curr.columns
+    df_curr.columns = ['CL', 'GC', 'PV']
+    print("Reference number = {}".format(ref_num))
+    run_model_individual(
                         retailer = origin_model,
                         spot_data = spot_data,
                         grid_event_arr = grid_events,
                         ref_num=69,
+                        house_data=df_curr,
                         input_dir='dataIn',
                         output_dir='dataOut'
-)
-"""
+    )
+

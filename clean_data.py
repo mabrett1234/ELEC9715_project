@@ -63,3 +63,6 @@ print(invalid_refs)
 print("Writing clean data to excel file. This may take some time.")
 df.to_excel("household_data_clean.xlsx")
 print("Written data to excel.")
+
+
+
