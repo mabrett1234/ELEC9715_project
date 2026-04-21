@@ -101,21 +101,23 @@ df = df.iloc[:, 1:]
 print("Data imported.")
 
 n = int(len(df.columns)/3)
-
+# TO DO: Save useful annual data totals to dataframe and then excel file.
+# TO DO: Check the cost calc is correct for export with self consumption op
+# TO DO: Save timeseries totals to dataframe and then excel file.
 for i in range(0, n):
     # Get current household
     df_curr = df.iloc[:,(i*3):((i+1)*3)]
     ref_num = str(df_curr.columns[0])
-    ref_num = ref_num.split("_")[0]
+    ref_num = int(ref_num.split("_")[0])
     # Update columns for readability
     old_cols = df_curr.columns
     df_curr.columns = ['CL', 'GC', 'PV']
-    print("Reference number = {}".format(ref_num))
+    print("======FOR HOUSEHOLD {}=======".format(ref_num))
     run_model_individual(
                         retailer = origin_model,
                         spot_data = spot_data,
                         grid_event_arr = grid_events,
-                        ref_num=69,
+                        ref_num=ref_num,
                         house_data=df_curr,
                         input_dir='dataIn',
                         output_dir='dataOut'
