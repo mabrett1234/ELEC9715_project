@@ -56,7 +56,7 @@ def run_model_individual(
     household_noVPP.calc_totals(ref_num)
     # Save data to excel spreadsheet
     fname = "{}\\self_consume_{}".format(output_dir, ref_num)
-    household_noVPP.write_to_excel(fname)
+    #household_noVPP.write_to_excel(fname)
 
     #=========VPP behaviour=========
     # Calculate the bess operation over the year
@@ -74,7 +74,7 @@ def run_model_individual(
     # Calculate totals
     household.calc_totals(ref_num)
     fname = "{}\\origin_vpp_{}".format(output_dir, ref_num)
-    household.write_to_excel(fname)
+    #household.write_to_excel(fname)
     return [household_noVPP, household]
 
 #==========Many households==========
@@ -92,7 +92,6 @@ grid_events = nem.identify_grid_events(spot_data, n_events)
 origin_model = origin.model_setup()
 print(origin_model) # print to check
 # Update the bess minimum state of charge to match origin VPP rules
-
 
 #=====Household data=========
 
@@ -195,5 +194,7 @@ df_tot_vpp = pd.DataFrame(
                 "Spot Profit (kWh)":tot_vpp_arr[:,5]
         }
 )
+print(df_tot_sc)
+print(df_tot_vpp)
 df_tot_sc.to_excel("self_consumption_total_by_household.xlsx")
 df_tot_vpp.to_excel("vpp_total_by_household.xlsx")

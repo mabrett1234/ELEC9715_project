@@ -54,6 +54,7 @@ def identify_grid_events(spot_data, n_events):
     for t in range(0, n):
         if spot_data.iloc[t] > threshold:
             df.iloc[t,0] = 1
+            #print("Grid event at index {}".format(t))
     return df
 
 # TODO: Update origin costing to look like this
