@@ -54,6 +54,8 @@ def run_model_individual(
     # Add the spot data in there too
     nem.calc_cost(household_noVPP, spot_data)
     household_noVPP.calc_totals(ref_num)
+    print("Checking just after calling the method:")
+    print(household_noVPP.annual_totals)
     # Save data to excel spreadsheet
     fname = "{}\\self_consume_{}".format(output_dir, ref_num)
     #household_noVPP.write_to_excel(fname)
@@ -72,7 +74,12 @@ def run_model_individual(
     # Add the spot data there too
     nem.calc_cost(household, spot_data)
     # Calculate totals
+    print("Checking just before calling the method for the other household class:")
+    print(household_noVPP.annual_totals)
+    # This line updates totals in household_noVPP somehow
     household.calc_totals(ref_num)
+    print("Checking just after calling the method for the other household class:")
+    print(household_noVPP.annual_totals)
     fname = "{}\\origin_vpp_{}".format(output_dir, ref_num)
     #household.write_to_excel(fname)
     return [household_noVPP, household]
@@ -128,7 +135,7 @@ import_arr_vpp = np.zeros(m)
 profit_arr_vpp = np.zeros(m)
 profit_spot_arr_vpp = np.zeros(m)
 
-for i in range(0, n):
+for i in range(0, 2):
     # Get current household
     df_curr = df.iloc[:,i*3:(i+1)*3]
     ref_num = str(df_curr.columns[0])
@@ -145,6 +152,9 @@ for i in range(0, n):
                         input_dir='dataIn',
                         output_dir='dataOut'
     )
+    # Check that the totals are working
+    print("Checking values in hhold_sc.annual_totals:")
+    print(hhold_sc.annual_totals)
     tot_sc_arr[i,:] = np.array(hhold_sc.annual_totals)
     tot_vpp_arr[i,:] = np.array(hhold_vpp.annual_totals)
 
@@ -173,6 +183,11 @@ tot_yr = pd.DataFrame(
 tot_yr.index = spot_data.index
 tot_yr.to_excel("annual_total_by_time.xlsx")
 
+print("Checking the arrays:")
+print("Grid support - should be zeroes for self consumption.")
+print(tot_sc_arr[:,3])
+# Issue in array. somehow being set wrong
+
 df_tot_sc = pd.DataFrame(
         {
             "Household Num":tot_sc_arr[:,0],
@@ -187,11 +202,11 @@ df_tot_sc = pd.DataFrame(
 df_tot_vpp = pd.DataFrame(
         {
             "Household Num":tot_vpp_arr[:,0],
-                "Export (kWh)":tot_vpp_arr[:,1],
-                "Import (kWh)":tot_vpp_arr[:,2],
-                "Grid Support (kWh)":tot_vpp_arr[:,3],
-                "Profit (kWh)":tot_vpp_arr[:,4],
-                "Spot Profit (kWh)":tot_vpp_arr[:,5]
+            "Export (kWh)":tot_vpp_arr[:,1],
+            "Import (kWh)":tot_vpp_arr[:,2],
+            "Grid Support (kWh)":tot_vpp_arr[:,3],
+            "Profit (kWh)":tot_vpp_arr[:,4],
+            "Spot Profit (kWh)":tot_vpp_arr[:,5]
         }
 )
 print(df_tot_sc)

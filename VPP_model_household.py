@@ -24,7 +24,6 @@ class Household:
     Organise data of one household to be easily accessible
     Try keep this structured so the VPP rules can be applied easily
     """
-    annual_totals = np.zeros(6)
 
     def __init__(
                 self,
@@ -38,6 +37,7 @@ class Household:
                 label=None
     ):
         print("Creating household class...")
+        self.annual_totals = np.zeros(6)
         self.pvCapacity = pv_cap
         # Just going to use defaults for these for most analysis
         self.bessCapacity = bess_capacity
